@@ -8,6 +8,18 @@ Configuration for stands and motor PVs is loaded from a YAML file
 confirmation between steps.
 
 Author: Ian Roque (iroque@slac.stanford.edu)
+
+Example usage for normal operation:
+    stands = StandsMovement('stands_config.yaml')
+    stands.set_kb_mode('kb2')
+    stands.init_move_all(nsteps=30)
+    stands.move_next_step_all()
+    stands.confirm_positions()
+
+Advanced usage for individual stands:
+    stands.init_move_individual('standDG4', nsteps=30)
+    stands.move_next_step_individual()
+    stands.confirm positions()
 """
 
 from ophyd import Device, EpicsMotor     # For hardware and EPICS controls
@@ -99,3 +111,63 @@ class StandsMovement:
 
         self._current_step += 1
         print("\n")
+
+    def confirm_positions(self):
+        """ Print and log current positions of all axes. """
+        print("Current positions of all axes")
+        for stand in self.stands:
+            for axis is self.stand_detectors[stand]:
+                motor = self.motors[stand][axis]
+                print(f"    {stand} {axis}: {motor.position:.5f}")
+                logger.info(f"{stand} {axis}: {motor.position:.5f}")
+        print()
+
+    # Move a single stand independently (use with caution)
+    dev init_move_individual(self, stand, nsteps=30):
+        if stand not in self.stands:
+            print(f"ERROR: Stand {stand} not found oin config.")
+            return
+        print(f"\n!!! WARNING: You are about to move {stand} independently.
+        !!!")
+        logger.warning(f"Advanced move: initialising move for {stand} only.")
+        self._step_plans = {}
+        self._current_setup = 0
+        self._nsteps = nsteps
+        for axis in self.stand_detectors[stand]:
+            motor = self.motors[stand][axis]
+            target = self.stand_detectors[stand][axis][self.kb_mode]
+            start = motor.position
+            step_positions = [start + (target - start) * (i + 1) / nsteps for i
+                    in range(nsteps)]
+            self._step_plans[(stand, axis)] = step_positions
+            print(f"    {stand} {axis}: {start:.5f} -> {target:.5f}")
+            logger.infor(f"{stand} {axis}: {start:.5f} -> {target:.5f}")
+        print()
+
+    def move_next_step_indivdual(self):
+        if self._step_plans is None or self._current_step is None:
+            print("ERROR: No move initialised. Run init_move_individual(stand, 
+            nsteps) first.\n")
+            logger.error("Noe move intialised for individual stand.")
+            return
+        if self._current_step >= self._nsteps:
+            print(("n=== Individual move complete. Axes at target positions.
+            ===\n")
+            logger.info("Individual move complete.")
+            return
+        print(f"\n===INDIVIDUAL MOVE STEP {self._current_step +
+        1}/{self._nsteps}")
+        logger.info(f"\n===INDIVIDUAL MOVE STEP {self._current_step +
+        1}/{self._nsteps}")
+        moves = []
+        for (stand, axis), step_positions in self._step_plans.items():
+            next_pos = step_positions[self._current_step]
+            motor = self.motors[stand][axis]
+            print(f"    {stand} {axis}: moving to {next_pos:.5f}")
+            logger.info(f"{stand} {axis}: moving to {next_pos:.5f}")
+            moves.append(motor.move(next_pos, wait=False))
+        for move in moves:
+            move.wait()
+        self._current_step += 1
+        print ("\n")
+
